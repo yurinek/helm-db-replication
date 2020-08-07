@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: {{ .Values.masterDeployment.name }}
+    labels: 
+      app: {{ .Values.labelMaster }}
+spec:
+  replicas: {{ .Values.masterDeployment.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.labelMaster }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.labelMaster }}
+    spec:
+      # make sure master and slave pods are created on different nodes
+      # if a node already has a pod with defined label, then next pod wont be scheduled on same node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              # pod label key
+              - key: app
+                operator: In
+                values:
+                # pod label value (can be eather db_master or db_slave, but needs to be same in master-yaml and slave-yaml)
+                - {{ .Values.labelMaster }}
+            topologyKey: "kubernetes.io/hostname"
+      volumes:
+        - name: {{ .Values.masterDeployment.volume }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.pvc.name }}
+        - name: {{ .Values.masterDeployment.volumeCM }}
+          configMap:
+            # Provide the name of the ConfigMap you want to mount.
+            name: {{ .Values.cm.name }}
+            # An array of keys from the ConfigMap to create as files
+            items:
+            - key: "{{ .Values.cm.key }}"
+              # path is here only file name which is stored under /db-queries
+              path: "{{ .Values.cm.key }}"
+      containers:
+        - name: {{ .Values.masterDeployment.container }}
+          image: {{ .Values.masterDeployment.image }}
+          ports:
+            - containerPort: {{ .Values.masterDeployment.containerPort }}
+          resources:
+            requests:
+              memory: "{{ .Values.masterDeployment.requestMemory }}"
+              cpu: "{{ .Values.masterDeployment.requestCpu }}"
+            limits:
+              memory: "{{ .Values.masterDeployment.limitMemory }}"
+              cpu: "{{ .Values.masterDeployment.limitCpu }}"
+          volumeMounts:
+            - mountPath: "{{ .Values.masterDeployment.mountPath }}"
+              name: {{ .Values.masterDeployment.volume }}
+            # Provide the name of the ConfigMap
+            - name: {{ .Values.masterDeployment.volumeCM }}
+              mountPath: "{{ .Values.masterDeployment.mountPathCM }}"
+              readOnly: true
+          env:
+            {{- /* dict data will appear in alphabetical order */ -}}
+            {{- range $key, $val := .Values.masterDeployment.envVariables }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: password
+

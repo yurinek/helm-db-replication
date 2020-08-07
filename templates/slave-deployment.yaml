@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+    name: {{ .Values.slaveDeployment.name }}
+    labels: 
+      app: {{ .Values.labelSlave }}
+spec:
+  replicas: {{ .Values.slaveDeployment.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.labelSlave }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.labelSlave }}
+    spec:
+      # make sure master and slave pods are created on different nodes
+      # if a node already has a pod with defined label, then next pod wont be scheduled on same node
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              # pod label key
+              - key: app
+                operator: In
+                values:
+                # pod label value (can be eather db_master or db_slave, but needs to be same in master-yaml and slave-yaml)
+                - {{ .Values.labelMaster }}
+            topologyKey: "kubernetes.io/hostname"
+      volumes:
+        - name: {{ .Values.slaveDeployment.volumeCM }}
+          configMap:
+            # Provide the name of the ConfigMap you want to mount.
+            name: {{ .Values.cm.name }}
+            # An array of keys from the ConfigMap to create as files
+            items:
+            - key: "{{ .Values.cm.key }}"
+              # path is here only file name which is stored under /db-queries
+              path: "{{ .Values.cm.key }}"
+      containers:
+        - name: {{ .Values.slaveDeployment.container }}
+          image: {{ .Values.slaveDeployment.image }}
+          ports:
+            - containerPort: {{ .Values.slaveDeployment.containerPort }}
+          resources:
+            requests:
+              memory: "{{ .Values.slaveDeployment.requestMemory }}"
+              cpu: "{{ .Values.slaveDeployment.requestCpu }}"
+            limits:
+              memory: "{{ .Values.slaveDeployment.limitMemory }}"
+              cpu: "{{ .Values.slaveDeployment.limitCpu }}"
+          volumeMounts:
+            - name: {{ .Values.slaveDeployment.volumeCM }}
+              mountPath: "{{ .Values.slaveDeployment.mountPathCM }}"
+              readOnly: true
+          env:
+            {{- /* dict data will appear in alphabetical order */ -}}
+            {{- range $key, $val := .Values.slaveDeployment.envVariables }}
+            - name: {{ $key }}
+              value: {{ $val | quote }}
+            {{- end }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.secret.name }}
+                  key: password

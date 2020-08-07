@@ -1,0 +1,89 @@
+
+labelMaster: db_master
+labelSlave: db_slave
+
+# persistent volume
+pv:
+  name: volume-pv-hostpath
+  type: local
+  storageClass: mycustomclass
+  size: 5Gi
+  mode: ReadWriteOnce
+  path: /mnt/data
+
+
+# persistent volume claim
+pvc:
+  name: master-volume-pvc-hostpath
+  size: 1Gi
+
+
+# configMap
+cm:
+  name: queries
+  key: query1.sql
+  value: "SELECT * FROM test;"
+
+
+secret:
+  name: db-auth
+  # already encrypted values
+  userValue: cG9zdGdyZXM=
+  passwordValue: bXlzZWNyZXQ=
+
+
+serviceNodePort:
+  name: master-node-port
+  type: NodePort
+  externalPort: 3050
+  internalPort: 5439
+
+
+serviceClusterIP:
+  name: master-cluster-dns-name
+  type: ClusterIP
+  externalPort: 5439
+  internalPort: 5439
+
+
+masterDeployment:
+  name: master-deployment
+  replicas: 1
+  volume: master-volume
+  # volume for configMap
+  volumeCM: queries-volume
+  mountPath: /data_alternate
+  mountPathCM: /db-queries
+  container: postgres-master
+  image: yurinek/postgres_master:12_k8s
+  containerPort: 5439
+  requestMemory: 300Mi
+  requestCpu: 0.5
+  limitMemory: 400Mi
+  limitCpu: 1
+  envVariables:
+    RUNTIME_ENV_PG_VERSION_PULL: "12"
+    RUNTIME_ENV_PG_CLUSTER_PATH: "/data_alternate"
+    RUNTIME_ENV_PG_PORT: "5439"
+    RUNTIME_ENV_PG_DB: "obscure_db"
+
+
+slaveDeployment:
+  name: slave-deployment
+  replicas: 1
+  # volume for configMap
+  volumeCM: queries-volume
+  mountPathCM: /db-queries
+  container: postgres-slave
+  image: yurinek/postgres_slave:12_k8s
+  containerPort: 5439
+  requestMemory: 300Mi
+  requestCpu: 0.5
+  limitMemory: 400Mi
+  limitCpu: 1
+  envVariables:
+    RUNTIME_ENV_PG_VERSION_PULL: "12"
+    RUNTIME_ENV_PG_CLUSTER_PATH: "/data_alternate"
+    RUNTIME_ENV_PG_PORT: "5439"
+    RUNTIME_ENV_PG_DB: "obscure_db"
+    RUNTIME_ENV_MASTER_HOST: "master-cluster-dns-name"

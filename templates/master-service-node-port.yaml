@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+    name: {{ .Values.serviceNodePort.name }}
+spec:
+    type: {{ .Values.serviceNodePort.type }}
+    ports:
+      # Other pods within the cluster can communicate with this pod on the specified port
+      # NodePort is the default setting if the port field is not specified
+      - port: {{ .Values.serviceNodePort.externalPort }}
+        # container port
+        targetPort: {{ .Values.serviceNodePort.internalPort }}
+    selector:
+        app: {{ .Values.labelMaster }}
